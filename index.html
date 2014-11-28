@@ -11,7 +11,7 @@ var changebits = function() {
     exponentShow.textContent = exponentBits.value;
     var mb = parseInt(mantissaBits.value);
     var eb = parseInt(exponentBits.value);
-    ctx = new FloatContext(mb, eb, false);
+    ctx = new FloatContext(mb, eb, false, true);
     // Note: lowp defines precision in absolute terms. So if the maximum exponent is too great,
     // the maximum value that can be represented does not have the required absolute precision.
     // This is likely just a bug in the spec, though.
@@ -20,6 +20,7 @@ var changebits = function() {
     highp.style.display = (mb >= 16 && eb >= 8) ? 'inline' : 'none';
     ieee.style.display = (mb == 23 && eb == 8) ? 'inline' : 'none';
     shaderPrecisionFormat.textContent = JSON.stringify(ctx.getShaderPrecisionFormat());
+    showOperands();
 };
 
 var addOpButtons = function(parent) {
@@ -51,6 +52,7 @@ var addOpButtons = function(parent) {
                 var result = ctx[fnName](a, b);
                 log(fnName, a + ', ' + b, result);
                 operandA.value = result;
+                showOperands();
             }
             parent.appendChild(btn);
         })(fnNames[i]);
@@ -68,6 +70,39 @@ var log = function(fnName, args, result) {
 var start = function() {
     changebits();
     addOpButtons(document.getElementById('buttons'));
+    window.setInterval(showOperands, 100);
+};
+
+var showOperand = function(a, parent) {
+    if (isNaN(a)) {
+        parent.innerHTML = 'NaN (' + ctx.nanBitString() + ')';
+        return;
+    }
+    parent.innerHTML = "";
+    var sign = document.createElement('span');
+    sign.classList.add('signBit');
+    var exp = document.createElement('span');
+    exp.classList.add('exponent');
+    var expBits = document.createElement('span');
+    expBits.classList.add('exponentBits');
+    var mantissa = document.createElement('span');
+    mantissa.classList.add('mantissaBits');
+
+    var parts = ctx.toBitStrings(a);
+
+    sign.textContent = parts.sign;
+    parent.appendChild(document.createTextNode('(-1)'));
+    parent.appendChild(sign);
+
+    parent.appendChild(document.createTextNode(' * 10'));
+    expBits.textContent = parts.exponent;
+    exp.appendChild(expBits);
+    exp.appendChild(document.createTextNode(' - ' + parts.exponentBias));
+    parent.appendChild(exp);
+
+    parent.appendChild(document.createTextNode(' * ' + (parts.isZero ? '0' : '1') + '.'));
+    mantissa.textContent = parts.mantissa;
+    parent.appendChild(mantissa);
 };
 
 var loadOperands = function() {
@@ -75,14 +110,33 @@ var loadOperands = function() {
     var result = ctx.fr(a);
     log("LOAD", a, result);
     operandA.value = result;
+    showOperand(result, aBreakdown);
     var b = parseFloat(operandB.value);
     var result = ctx.fr(b);
     if (b !== a) {
         log("LOAD", b, result);
     }
     operandB.value = result;
+    showOperand(result, bBreakdown);
 };
+
+var showOperands = function() {
+    var a = parseFloat(operandA.value);
+    showOperand(a, aBreakdown);
+    var b = parseFloat(operandB.value);
+    showOperand(b, bBreakdown);
+};
+
 </script>
+<style>
+.signBit, .exponent {
+    vertical-align: super;
+    font-size: 70%;
+}
+.signBit, .exponentBits, .mantissaBits {
+    background-color: #fa8;
+}
+</style>
 </head>
 <body onload="start()">
 <h1>Mediump float calculator</h1>
@@ -107,11 +161,18 @@ GLSL precision:
 <p>
 WebGL getShaderPrecisionFormat would return: <span id="shaderPrecisionFormat"></span>
 </p>
+<p>
 Operand A:
 <input type="number" id="operandA" value="0"></input>
+&#8776; binary <span id="aBreakdown" class="breakdown"></span>
+</p>
+<p>
 Operand B:
 <input type="number" id="operandB" value="0"></input>
-<br>
+&#8776; binary <span id="bBreakdown" class="breakdown"></span>
+</p>
+<p>
+</p>
 <div id="buttons">
 <input type="button" value="LOAD" onclick="loadOperands()"></input>
 </div>

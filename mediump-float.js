@@ -25,11 +25,16 @@ var getNumberParts = function(x) {
     };
 };
 
+var exponentBias = function(exponentBits) {
+    var possibleExponents = Math.pow(2, exponentBits);
+    return possibleExponents / 2 - 1;
+};
+
 var maxNormalExponent = function(exponentBits) {
     var possibleExponents = Math.pow(2, exponentBits);
-    var exponentBias = possibleExponents / 2 - 1;
+    var bias = exponentBias(exponentBits);
     var allExponentBitsOne = possibleExponents - 1;
-    return (allExponentBitsOne - 1) - exponentBias;
+    return (allExponentBitsOne - 1) - bias;
 };
 
 /**
@@ -73,11 +78,11 @@ var froundBits = function(src, mantissaBits, exponentBits, clampToInf, flushSubn
     var parts = getNumberParts(src);
     // TODO: Customizable rounding (this is now round-to-zero)
     var mantissaRounded = Math.floor(parts.mantissa * possibleMantissas) / possibleMantissas;
-    if (parts.exponent < -maxNormalExponent(exponentBits)) {
+    if (parts.exponent + exponentBias(exponentBits) <= 0) {
         if (flushSubnormal) {
             return Math.pow(-1, parts.sign) * 0;
         } else {
-            while (parts.exponent < -maxNormalExponent(exponentBits)) {
+            while (parts.exponent + exponentBias(exponentBits) <= 0) {
                 parts.exponent += 1;
                 mantissaRounded = Math.floor(mantissaRounded / 2 * possibleMantissas) / possibleMantissas;
                 if (mantissaRounded === 0) {
@@ -146,6 +151,37 @@ var FloatContext = function(mantissaBits, exponentBits, clampToInf, flushSubnorm
     };
     this.isSubnormal = function(x) {
         return isSubnormal(x, mantissaBits, exponentBits);
+    };
+    this.toBitStrings = function(original) {
+        var x = this.fr(original);
+        var parts = getNumberParts(x);
+        var exponentBitRepr = (parts.exponent + exponentBias(exponentBits)).toString(2);
+        var mantissaBitRepr = (parts.mantissa * Math.pow(2, mantissaBits)).toString(2).substring(1);
+        var isZero = parts.exponent === -1023;
+        if (isZero) {
+            exponentBitRepr = '';
+            mantissaBitRepr = '';
+        }
+        while (exponentBitRepr.length < exponentBits) {
+            exponentBitRepr = '0' + exponentBitRepr;
+        }
+        while (mantissaBitRepr.length < mantissaBits) {
+            mantissaBitRepr = '0' + mantissaBitRepr;
+        }
+        return {
+            sign: String(parts.sign),
+            exponent: exponentBitRepr,
+            mantissa: mantissaBitRepr,
+            exponentBias: exponentBias(exponentBits).toString(2),
+            isZero: isZero
+        };
+    };
+    this.nanBitString = function() {
+        var bitString = '';
+        while (bitString.length < exponentBits + mantissaBits + 1) {
+            bitString += '1';
+        }
+        return bitString;
     };
 };
 
