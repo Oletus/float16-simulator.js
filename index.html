@@ -1,0 +1,122 @@
+<html>
+<head>
+<title>Calculator that simulates floating-point numbers at the specified precision</title>
+<script src="mediump-float.js"></script>
+<script>
+var ctx;
+var logText = '';
+
+var changebits = function() {
+    mantissaShow.textContent = mantissaBits.value;
+    exponentShow.textContent = exponentBits.value;
+    var mb = parseInt(mantissaBits.value);
+    var eb = parseInt(exponentBits.value);
+    ctx = new FloatContext(mb, eb, false);
+    // Note: lowp defines precision in absolute terms. So if the maximum exponent is too great,
+    // the maximum value that can be represented does not have the required absolute precision.
+    // This is likely just a bug in the spec, though.
+    lowp.style.display = (mb >= 8 && eb >= 2 && maxNormalExponent(eb) <= (mb + 1) - 8) ? 'inline' : 'none';
+    mediump.style.display = (mb >= 10 && eb >= 5) ? 'inline' : 'none';
+    highp.style.display = (mb >= 16 && eb >= 8) ? 'inline' : 'none';
+    ieee.style.display = (mb == 23 && eb == 8) ? 'inline' : 'none';
+    shaderPrecisionFormat.textContent = JSON.stringify(ctx.getShaderPrecisionFormat());
+};
+
+var addOpButtons = function(parent) {
+    var fnNames = FloatContext.functions1;
+    for (var i = 0; i < fnNames.length; ++i) {
+        (function(fnName) {
+            var btn = document.createElement('input');
+            btn.type = 'button';
+            btn.value = fnName;
+            btn.onclick = function() {
+                var a = parseFloat(operandA.value);
+                var result = ctx[fnName](a);
+                log(fnName, a, result);
+                operandA.value = result;
+            }
+            parent.appendChild(btn);
+        })(fnNames[i]);
+    }
+    parent.appendChild(document.createElement('br'));
+    var fnNames = FloatContext.functions2;
+    for (var i = 0; i < fnNames.length; ++i) {
+        (function(fnName) {
+            var btn = document.createElement('input');
+            btn.type = 'button';
+            btn.value = fnName;
+            btn.onclick = function() {
+                var a = parseFloat(operandA.value);
+                var b = parseFloat(operandB.value);
+                var result = ctx[fnName](a, b);
+                log(fnName, a + ', ' + b, result);
+                operandA.value = result;
+            }
+            parent.appendChild(btn);
+        })(fnNames[i]);
+    }
+};
+
+var log = function(fnName, args, result) {
+    var fnLog = fnName + "(" + args + ") = " + result + (ctx.isSubnormal(result) ? ' (subnormal)' : '');
+    console.log(ctx.getSpecString());
+    console.log(fnLog);
+    logText = ctx.getSpecString() + ':\n' + fnLog + '\n' + logText;
+    logElement.textContent = logText;
+};
+
+var start = function() {
+    changebits();
+    addOpButtons(document.getElementById('buttons'));
+};
+
+var loadOperands = function() {
+    var a = parseFloat(operandA.value);
+    var result = ctx.fr(a);
+    log("LOAD", a, result);
+    operandA.value = result;
+    var b = parseFloat(operandB.value);
+    var result = ctx.fr(b);
+    if (b !== a) {
+        log("LOAD", b, result);
+    }
+    operandB.value = result;
+};
+</script>
+</head>
+<body onload="start()">
+<h1>Mediump float calculator</h1>
+<h2>i.e. your floating-point computation results may vary</h2>
+<p>This page implements a crude simulation of how floating-point calculations could be performed
+on a chip implementing n-bit floating point arithmetic. It does not model any specific chip, but
+rather just tries to comply to the OpenGL ES shading language spec.
+</p>
+Mantissa bits:
+<input type="range" id="mantissaBits" min="5" max="23" value="10" onchange="changebits()"></input>
+<span id="mantissaShow"></span><br>
+Exponent bits:
+<input type="range" id="exponentBits" min="2", max="8" value="5" onchange="changebits()"></input>
+<span id="exponentShow"></span><br>
+<p style="font-weight: bold;">
+GLSL precision:
+<span id="lowp" style="background-color: #faa;">lowp criteria fulfilled</span>
+<span id="mediump" style="background-color: #fad;">mediump criteria fulfilled</span>
+<span id="highp" style="background-color: #daf;">ES 1.00 highp criteria fulfilled</span>
+<span id="ieee" style="background-color: #adf;">ES 3.00 highp criteria fulfilled. approximates IEEE single-precision</span>
+</p>
+<p>
+WebGL getShaderPrecisionFormat would return: <span id="shaderPrecisionFormat"></span>
+</p>
+Operand A:
+<input type="number" id="operandA" value="0"></input>
+Operand B:
+<input type="number" id="operandB" value="0"></input>
+<br>
+<div id="buttons">
+<input type="button" value="LOAD" onclick="loadOperands()"></input>
+</div>
+<h2>Log</h2>
+<pre id="logElement">
+</pre>
+</body>
+</html>
