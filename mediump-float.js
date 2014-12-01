@@ -172,6 +172,7 @@ var FloatContext = function(mantissaBits, exponentBits, clampToInf, flushSubnorm
             sign: String(parts.sign),
             exponent: exponentBitRepr,
             mantissa: mantissaBitRepr,
+            possibleMantissas: Math.pow(2, mantissaBits),
             exponentBias: exponentBias(exponentBits).toString(2),
             isZero: isZero
         };

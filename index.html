@@ -5,6 +5,7 @@
 <script>
 var ctx;
 var logText = '';
+var cachedA, cachedB;
 
 var changebits = function() {
     mantissaShow.textContent = mantissaBits.value;
@@ -20,6 +21,8 @@ var changebits = function() {
     highp.style.display = (mb >= 16 && eb >= 8) ? 'inline' : 'none';
     ieee.style.display = (mb == 23 && eb == 8) ? 'inline' : 'none';
     shaderPrecisionFormat.textContent = JSON.stringify(ctx.getShaderPrecisionFormat());
+    cachedA = undefined;
+    cachedB = undefined;
     showOperands();
 };
 
@@ -73,20 +76,28 @@ var start = function() {
     window.setInterval(showOperands, 100);
 };
 
-var showOperand = function(a, parent) {
+var showOperand = function(a, parent, binary) {
     if (isNaN(a)) {
         parent.innerHTML = 'NaN (' + ctx.nanBitString() + ')';
         return;
     }
     parent.innerHTML = "";
     var sign = document.createElement('span');
-    sign.classList.add('signBit');
     var exp = document.createElement('span');
-    exp.classList.add('exponent');
     var expBits = document.createElement('span');
-    expBits.classList.add('exponentBits');
     var mantissa = document.createElement('span');
+    sign.classList.add('signBit');
+    exp.classList.add('exponent');
+    expBits.classList.add('exponentBits');
     mantissa.classList.add('mantissaBits');
+    var elements = [sign, exp, expBits, mantissa];
+    for (i = 0; i < elements.length; ++i) {
+        if (binary) {
+            elements[i].classList.add('binary');
+        } else {
+            elements[i].classList.add('decimal');
+        }
+    }
 
     var parts = ctx.toBitStrings(a);
 
@@ -94,14 +105,31 @@ var showOperand = function(a, parent) {
     parent.appendChild(document.createTextNode('(-1)'));
     parent.appendChild(sign);
 
-    parent.appendChild(document.createTextNode(' * 10'));
-    expBits.textContent = parts.exponent;
-    exp.appendChild(expBits);
-    exp.appendChild(document.createTextNode(' - ' + parts.exponentBias));
+    if (binary) {
+        parent.appendChild(document.createTextNode(' * 10'));
+        expBits.textContent = parts.exponent;
+        exp.appendChild(expBits);
+        exp.appendChild(document.createTextNode(' - ' + parts.exponentBias));
+    } else {
+        parent.appendChild(document.createTextNode(' * 2'));
+        exponent = parseInt(parts.exponent, 2) - parseInt(parts.exponentBias, 2);
+        expBits.textContent = exponent;
+        exp.appendChild(expBits);
+    }
     parent.appendChild(exp);
 
     parent.appendChild(document.createTextNode(' * ' + (parts.isZero ? '0' : '1') + '.'));
-    mantissa.textContent = parts.mantissa;
+    if (binary) {
+        mantissa.textContent = parts.mantissa;
+    } else {
+        var mantissaStr = String(parseInt(parts.mantissa, 2) / parts.possibleMantissas);
+        if (mantissaStr.length < 3) {
+            mantissaStr = '0';
+        } else {
+            mantissaStr = mantissaStr.substring(2);
+        }
+        mantissa.textContent = mantissaStr;
+    }
     parent.appendChild(mantissa);
 };
 
@@ -110,41 +138,76 @@ var loadOperands = function() {
     var result = ctx.fr(a);
     log("LOAD", a, result);
     operandA.value = result;
-    showOperand(result, aBreakdown);
     var b = parseFloat(operandB.value);
     var result = ctx.fr(b);
     if (b !== a) {
         log("LOAD", b, result);
     }
     operandB.value = result;
-    showOperand(result, bBreakdown);
+    showOperands();
 };
 
 var showOperands = function() {
     var a = parseFloat(operandA.value);
-    showOperand(a, aBreakdown);
+    if (a !== cachedA) {
+        showOperand(a, aBreakdown, true);
+        showOperand(a, aDecimalBreakdown, false);
+        cachedA = a;
+    }
     var b = parseFloat(operandB.value);
-    showOperand(b, bBreakdown);
+    if (b !== cachedB) {
+        showOperand(b, bBreakdown, true);
+        showOperand(b, bDecimalBreakdown, false);
+        cachedB = b;
+    }
 };
 
 </script>
 <style>
+body {
+    background: #ddd;
+}
+.container {
+    width: 1000px;
+    margin: auto;
+}
 .signBit, .exponent {
     vertical-align: super;
     font-size: 70%;
 }
-.signBit, .exponentBits, .mantissaBits {
+.signBit.binary, .exponentBits.binary, .mantissaBits.binary {
     background-color: #fa8;
+}
+.signBit.decimal, .exponentBits.decimal, .mantissaBits.decimal {
+    background-color: #8fa;
+}
+.separator {
+    display: inline-block;
+    text-align: center;
+    width: 4em;
+}
+.section {
+    background: #fff;
+    padding: 1em;
+    margin: 1em 0;
+    border-radius: 5px;
+}
+.section h2 {
+    margin-top: 0;
 }
 </style>
 </head>
 <body onload="start()">
+<div class="container">
 <h1>Mediump float calculator</h1>
 <h2>i.e. your floating-point computation results may vary</h2>
 <p>This page implements a crude simulation of how floating-point calculations could be performed
 on a chip implementing n-bit floating point arithmetic. It does not model any specific chip, but
-rather just tries to comply to the OpenGL ES shading language spec.
+rather just tries to comply to the OpenGL ES shading language spec. Subnormal numbers are flushed to zero.
 </p>
+
+<div class="section">
+<h2>Float settings</h2>
 Mantissa bits:
 <input type="range" id="mantissaBits" min="5" max="23" value="10" onchange="changebits()"></input>
 <span id="mantissaShow"></span><br>
@@ -156,28 +219,35 @@ GLSL precision:
 <span id="lowp" style="background-color: #faa;">lowp criteria fulfilled</span>
 <span id="mediump" style="background-color: #fad;">mediump criteria fulfilled</span>
 <span id="highp" style="background-color: #daf;">ES 1.00 highp criteria fulfilled</span>
-<span id="ieee" style="background-color: #adf;">ES 3.00 highp criteria fulfilled. approximates IEEE single-precision</span>
+<span id="ieee" style="background-color: #adf;">ES 3.00 highp criteria fulfilled</span>
 </p>
 <p>
 WebGL getShaderPrecisionFormat would return: <span id="shaderPrecisionFormat"></span>
 </p>
+</div>
+
+<div class="section">
+<h2>Calculator</h2>
 <p>
 Operand A:
 <input type="number" id="operandA" value="0"></input>
-&#8776; binary <span id="aBreakdown" class="breakdown"></span>
+&#8776; binary <span id="aBreakdown" class="breakdown"></span><span class="separator"> = </span><span id="aDecimalBreakdown"></span>
 </p>
 <p>
 Operand B:
 <input type="number" id="operandB" value="0"></input>
-&#8776; binary <span id="bBreakdown" class="breakdown"></span>
+&#8776; binary <span id="bBreakdown" class="breakdown"></span><span class="separator"> = </span><span id="bDecimalBreakdown"></span>
 </p>
 <p>
 </p>
 <div id="buttons">
 <input type="button" value="LOAD" onclick="loadOperands()"></input>
 </div>
+</div>
+
 <h2>Log</h2>
 <pre id="logElement">
 </pre>
+</div>
 </body>
 </html>
