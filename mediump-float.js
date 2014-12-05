@@ -57,6 +57,8 @@ var froundBits = function(src, mantissaBits, exponentBits, clampToInf, flushSubn
         return NaN;
     }
 
+    // Note that Math.pow is specified to return an implementation-dependent approximation,
+    // but works well enough in practice to be used here for powers of two.
     var possibleMantissas = Math.pow(2, mantissaBits);
     var mantissaMax = 2.0 - 1.0 / possibleMantissas;
     var max = Math.pow(2, maxNormalExponent(exponentBits)) * mantissaMax; // value with all exponent bits 1 is special
@@ -80,18 +82,18 @@ var froundBits = function(src, mantissaBits, exponentBits, clampToInf, flushSubn
     var mantissaRounded = Math.floor(parts.mantissa * possibleMantissas) / possibleMantissas;
     if (parts.exponent + exponentBias(exponentBits) <= 0) {
         if (flushSubnormal) {
-            return Math.pow(-1, parts.sign) * 0;
+            return (parts.sign ? -0 : 0);
         } else {
             while (parts.exponent + exponentBias(exponentBits) <= 0) {
                 parts.exponent += 1;
                 mantissaRounded = Math.floor(mantissaRounded / 2 * possibleMantissas) / possibleMantissas;
                 if (mantissaRounded === 0) {
-                    return Math.pow(-1, parts.sign) * 0;
+                    return (parts.sign ? -0 : 0);
                 }
             }
         }
     }
-    return Math.pow(-1, parts.sign) * Math.pow(2, parts.exponent) * mantissaRounded;
+    return (parts.sign ? -1 : 1) * Math.pow(2, parts.exponent) * mantissaRounded;
 };
 
 /**
